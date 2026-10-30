@@ -1,4 +1,4 @@
-class_name AizuAreaDetectorComponent extends AizuInteractionDetector
+class_name AizuAreaDetector extends AizuInteractionDetector
 
 @export var area: Area3D
 

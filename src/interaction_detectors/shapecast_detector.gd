@@ -1,4 +1,4 @@
-class_name AizuShapecastDetectorComponent extends AizuInteractionDetector
+class_name AizuShapecastDetector extends AizuInteractionDetector
 
 @export var shapecast: ShapeCast3D
 
