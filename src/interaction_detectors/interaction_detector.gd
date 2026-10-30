@@ -1,16 +1,18 @@
 @abstract
 class_name AizuInteractionDetector extends Node3D
 
-func _report_candidate(candidate: Node) -> void:
-	if !candidate:
-		return
+enum DetectionMode {
+	PROXIMITY,
+	TARGET
+}
 
-	var interactable := AizuUtility.find_node_recursive(
-		candidate,
-		AizuInteractable
-	) as AizuInteractable
+@export var detection_mode: DetectionMode = DetectionMode.PROXIMITY
+@export var priority: int = 0
 
-	if !interactable:
-		return
 
-	AizuInteractionDetectorBus.interactable_found.emit(interactable)
+func _report_zone_found(zone: AizuInteractionZone) -> void:
+	AizuInteractionDetectorBus.zone_found.emit(self, zone.interactable, zone)
+
+
+func _report_zone_lost(zone: AizuInteractionZone) -> void:
+	AizuInteractionDetectorBus.zone_lost.emit(self, zone.interactable, zone)

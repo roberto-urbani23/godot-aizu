@@ -1,3 +1,13 @@
 extends Node
 
-signal interactable_found(interactable_component: AizuInteractable)
+signal zone_found(
+	detector: AizuInteractionDetector,
+	interactable: AizuInteractable,
+	zone: AizuInteractionZone
+)
+
+signal zone_lost(
+	detector: AizuInteractionDetector,
+	interactable: AizuInteractable,
+	zone: AizuInteractionZone
+)
