@@ -11,8 +11,8 @@ enum DetectionMode {
 
 
 func _report_zone_found(zone: AizuInteractionZone) -> void:
-	AizuInteractionDetectorBus.zone_found.emit(self, zone.interactable, zone)
+	AizuInteractionDetectorBus.zone_found.emit(self, zone)
 
 
 func _report_zone_lost(zone: AizuInteractionZone) -> void:
-	AizuInteractionDetectorBus.zone_lost.emit(self, zone.interactable, zone)
+	AizuInteractionDetectorBus.zone_lost.emit(self, zone)

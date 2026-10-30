@@ -1,10 +1,10 @@
 class_name AizuInteractionManager extends Node
 
 signal target_changed(zone: AizuInteractionZone)
-signal nearby_changed(interactables: Array[AizuInteractable])
+signal nearby_changed(zones: Array[AizuInteractionZone])
 
 var current_target: AizuInteractionZone
-var nearby_interactables: Array[AizuInteractable] = []
+var nearby_zones: Array[AizuInteractionZone] = []
 
 # detector -> { zone: true }
 var _detector_candidates: Dictionary = {}
@@ -15,11 +15,7 @@ func _ready() -> void:
 	AizuInteractionDetectorBus.zone_lost.connect(_on_zone_lost)
 
 
-func _on_zone_found(
-	detector: AizuInteractionDetector,
-	_interactable: AizuInteractable,
-	zone: AizuInteractionZone
-) -> void:
+func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
 	if not is_instance_valid(detector) or not is_instance_valid(zone):
 		return
 
@@ -32,11 +28,7 @@ func _on_zone_found(
 	_update_target()
 
 
-func _on_zone_lost(
-	detector: AizuInteractionDetector,
-	_interactable: AizuInteractable,
-	zone: AizuInteractionZone
-) -> void:
+func _on_zone_lost(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
 	if not _detector_candidates.has(detector):
 		return
 
@@ -50,17 +42,16 @@ func _on_zone_lost(
 
 
 func _update_nearby() -> void:
-	var new_nearby: Array[AizuInteractable] = []
+	var new_nearby: Array[AizuInteractionZone] = []
 
 	for detector in _detector_candidates:
 		for zone in _detector_candidates[detector]:
-			var interactable: AizuInteractable = zone.interactable
-			if is_instance_valid(interactable) and not new_nearby.has(interactable):
-				new_nearby.append(interactable)
+			if is_instance_valid(zone) and not new_nearby.has(zone):
+				new_nearby.append(zone)
 
-	if new_nearby != nearby_interactables:
-		nearby_interactables = new_nearby
-		nearby_changed.emit(nearby_interactables)
+	if new_nearby != nearby_zones:
+		nearby_zones = new_nearby
+		nearby_changed.emit(nearby_zones)
 
 
 func _update_target() -> void:
