@@ -9,6 +9,8 @@ signal interacted
 @export var is_detectable: bool = true
 @export var redetect_on_unlock: bool = true
 
+@export var interaction_text: String
+
 var _locked_detectable: bool
 var _locked_interactable: bool
 

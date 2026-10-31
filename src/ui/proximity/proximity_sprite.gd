@@ -1,4 +1,4 @@
-extends Sprite3D
+class_name AizuProximitySprite extends Sprite3D
 
 var _tween: Tween
 var _in_proximity: bool = false
