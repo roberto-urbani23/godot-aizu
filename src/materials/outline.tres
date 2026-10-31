@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://dco0oassbfyy0"]
+
+[ext_resource type="Shader" uid="uid://bhpk1s7ywbo48" path="res://addons/godot-aizu/src/shaders/outline.gdshader" id="1_it7mk"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_it7mk")
+shader_parameter/color = Color(1, 1, 1, 1)
+shader_parameter/size = 1.05

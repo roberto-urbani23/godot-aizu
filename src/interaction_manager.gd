@@ -13,6 +13,7 @@ var _detector_candidates: Dictionary = {}
 func _ready() -> void:
 	AizuInteractionDetectorBus.zone_found.connect(_on_zone_found)
 	AizuInteractionDetectorBus.zone_lost.connect(_on_zone_lost)
+	AizuInteractionDetectorBus.zone_locked.connect(_on_zone_locked)
 
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
@@ -62,6 +63,18 @@ func _update_target() -> void:
 		return
 	current_target = new_target
 	target_changed.emit(current_target)
+
+
+func _on_zone_locked(zone: AizuInteractionZone) -> void:
+	var to_emit: Array = []
+	for detector in _detector_candidates:
+		if _detector_candidates[detector].has(zone):
+			to_emit.append(detector)
+			_detector_candidates[detector].erase(zone)
+	_update_nearby()
+	_update_target()
+	for detector in to_emit:
+		AizuInteractionDetectorBus.zone_lost.emit(detector, zone)
 
 
 func _unhandled_input(event: InputEvent) -> void:

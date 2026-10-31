@@ -10,6 +10,7 @@ var _zone_overlaps: Dictionary = {}
 
 
 func _ready() -> void:
+	super()
 	if not area:
 		push_error("AizuAreaDetector: area not set")
 		return
@@ -19,6 +20,11 @@ func _ready() -> void:
 
 	area.area_entered.connect(_on_area_entered)
 	area.area_exited.connect(_on_area_exited)
+
+
+func recheck_zone(zone: AizuInteractionZone) -> void:
+	if _zone_overlaps.get(zone, 0) > 0:
+		_report_zone_found(zone)
 
 
 func _on_area_entered(detected: Area3D) -> void:

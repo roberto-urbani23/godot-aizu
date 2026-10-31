@@ -10,6 +10,10 @@ enum DetectionMode {
 @export var priority: int = 0
 
 
+func _ready() -> void:
+	add_to_group("aizu_detectors")
+
+
 func _report_zone_found(zone: AizuInteractionZone) -> void:
 	if not _should_report(zone):
 		return
@@ -25,5 +29,9 @@ func _report_zone_lost(zone: AizuInteractionZone) -> void:
 func _should_report(zone: AizuInteractionZone) -> bool:
 	if detection_mode == DetectionMode.PROXIMITY:
 		return zone.is_detectable
-	# TARGET: report if detectable or interactable
 	return zone.is_detectable or zone.is_interactable
+
+
+# Called by AizuInteractionZone.unlock() when redetect_on_unlock is true.
+func recheck_zone(_zone: AizuInteractionZone) -> void:
+	pass

@@ -15,7 +15,7 @@ Add an `AizuInteractionZone` (extends `Area3D`) as a child of your object. Give 
 ```
 MyObject (MeshInstance3D)
   AizuInteractionZone (Area3D)
-    CollisionShape3D
+	CollisionShape3D
 ```
 
 The zone handles collision layers automatically. You do not need to set them by hand.
@@ -41,10 +41,19 @@ Connect to `AizuInteractionDetectorBus` from anywhere:
 
 ```gdscript
 func _ready() -> void:
-    AizuInteractionDetectorBus.zone_found.connect(_on_zone_found)
+	AizuInteractionDetectorBus.zone_found.connect(_on_zone_found)
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
-    print("player near: ", zone.name)
+	print("player near: ", zone.name)
+```
+
+To filter by detector type, check `detection_mode` in the callback:
+
+```gdscript
+func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
+	if detector.detection_mode != AizuInteractionDetector.DetectionMode.PROXIMITY:
+		return
+	print("proximity only: ", zone.name)
 ```
 
 Connect to `interacted` on a specific zone:
@@ -53,10 +62,10 @@ Connect to `interacted` on a specific zone:
 @export var my_zone: AizuInteractionZone
 
 func _ready() -> void:
-    my_zone.interacted.connect(_on_interacted)
+	my_zone.interacted.connect(_on_interacted)
 
 func _on_interacted() -> void:
-    print("triggered!")
+	print("triggered!")
 ```
 
 Or connect to `AizuInteractionManager` signals directly:
@@ -65,8 +74,8 @@ Or connect to `AizuInteractionManager` signals directly:
 @export var manager: AizuInteractionManager
 
 func _ready() -> void:
-    manager.nearby_changed.connect(_on_nearby_changed)
-    manager.target_changed.connect(_on_target_changed)
+	manager.nearby_changed.connect(_on_nearby_changed)
+	manager.target_changed.connect(_on_target_changed)
 ```
 
 ## Zone flags

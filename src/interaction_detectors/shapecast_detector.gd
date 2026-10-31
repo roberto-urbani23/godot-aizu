@@ -8,6 +8,7 @@ var _current_zone: AizuInteractionZone
 
 
 func _ready() -> void:
+	super()
 	if not shapecast:
 		push_error("AizuShapecastDetector: shapecast not set")
 		return
@@ -15,6 +16,11 @@ func _ready() -> void:
 	shapecast.collision_mask = _COLLISION_MASK
 	shapecast.collide_with_bodies = false
 	shapecast.collide_with_areas = true
+
+
+func recheck_zone(zone: AizuInteractionZone) -> void:
+	if _current_zone == zone:
+		_report_zone_found(zone)
 
 
 func _physics_process(_delta: float) -> void:
