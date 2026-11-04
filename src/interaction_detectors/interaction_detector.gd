@@ -11,7 +11,7 @@ enum DetectionMode {
 
 
 func _ready() -> void:
-	add_to_group("aizu_detectors")
+	AizuInteractionDetectorBus.zone_unlocked.connect(_on_zone_unlocked)
 
 
 func _report_zone_found(zone: AizuInteractionZone) -> void:
@@ -28,10 +28,15 @@ func _report_zone_lost(zone: AizuInteractionZone) -> void:
 
 func _should_report(zone: AizuInteractionZone) -> bool:
 	if detection_mode == DetectionMode.PROXIMITY:
-		return zone.is_detectable
-	return zone.is_detectable or zone.is_interactable
+		return zone.can_be_detected()
+	return zone.can_be_detected() or zone.can_be_triggered()
 
 
-# Called by AizuInteractionZone.unlock() when redetect_on_unlock is true.
+func _on_zone_unlocked(zone: AizuInteractionZone) -> void:
+	if zone.redetect_on_unlock:
+		recheck_zone(zone)
+
+
+# Called when a zone unlocks and its redetect_on_unlock is true.
 func recheck_zone(_zone: AizuInteractionZone) -> void:
 	pass

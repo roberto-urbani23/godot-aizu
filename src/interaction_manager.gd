@@ -40,7 +40,7 @@ func _update_nearby() -> void:
 	var new_nearby: Array[AizuInteractionZone] = []
 	for detector in _detector_candidates:
 		for zone in _detector_candidates[detector]:
-			if is_instance_valid(zone) and zone.is_detectable and not new_nearby.has(zone):
+			if is_instance_valid(zone) and zone.can_be_detected() and not new_nearby.has(zone):
 				new_nearby.append(zone)
 	if new_nearby != nearby_zones:
 		nearby_zones = new_nearby
@@ -80,7 +80,7 @@ func _on_zone_locked(zone: AizuInteractionZone) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_instance_valid(current_target):
 		return
-	if not current_target.is_interactable:
+	if not current_target.can_be_triggered():
 		return
 	if not current_target.interaction_trigger:
 		return
