@@ -241,6 +241,7 @@ A hint icon in the world. It starts hidden, fades in when a `PROXIMITY` detector
 | Export | Description |
 |---|---|
 | `zone` | the zone it reacts to. If null it reacts to every zone |
+| `icon_set` | optional [`AizuProximityIconSet`](#proximity-icons). If set, the sprite shows the icon of the key that fires the zone |
 
 Use one sprite per zone when an object has several zones, so each icon sits next to its own interaction point:
 
@@ -256,6 +257,18 @@ Door
 Put the zones and the sprites under the node that moves, so they follow it.
 
 If you wrap the sprite in your own scene (for example to add an `AnimationPlayer`), expose a `zone` export on the root and forward it to the sprite in `_ready`. An instanced scene does not let you edit the inner node's exports.
+
+#### Proximity icons
+
+With an `icon_set` the sprite shows the key or mouse button that fires the zone (an `F` for a zone bound to F) instead of a fixed texture. The addon ships no icons, so you build the set from whatever icon pack your game uses.
+
+1. Create an `AizuProximityIconSet` resource.
+2. Add one `AizuProximityIcon` per input: set `key` or `mouse_button`, and the `texture`.
+3. Assign the set to the `icon_set` of every `AizuProximitySprite` that should show icons.
+
+If the zone's input has no entry in the set, that sprite never shows and nothing is reported as an error. If the action has several events (keyboard and gamepad), the first one with an icon is used. Physical-only keys from the Input Map are shown as the key printed on the player's layout.
+
+The choice is per sprite: leave `icon_set` empty on a sprite to keep its own `texture`, for example a generic hint for a zone that has no trigger. One set resource can be shared by all sprites.
 
 ### AizuInteractableOutline (Node)
 

@@ -13,6 +13,17 @@ func is_triggered(event: InputEvent) -> bool:
 
 	return false
 
+
+## Every input that fires this trigger: the override, or the events of the action.
+func get_input_events() -> Array[InputEvent]:
+	var events: Array[InputEvent] = []
+	if input_override:
+		events.append(input_override)
+	elif interaction_input_action_name and InputMap.has_action(interaction_input_action_name):
+		events.append_array(InputMap.action_get_events(interaction_input_action_name))
+	return events
+
+
 func format_text(text: String) -> String:
 	if text.is_empty():
 		return ""
@@ -28,6 +39,8 @@ func get_key_as_string() -> String:
 	for event in events:
 		var key_event := event as InputEventKey
 		if key_event:
-			var kc := key_event.keycode if key_event.keycode != KEY_NONE else key_event.physical_keycode
+			var kc := (
+				key_event.keycode if key_event.keycode != KEY_NONE else key_event.physical_keycode
+			)
 			return OS.get_keycode_string(kc)
 	return ""
