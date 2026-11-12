@@ -21,8 +21,8 @@ Manager  ->  zone.interacted  ->  your code
 
 ## Setup
 
-1. Enable the plugin in Project > Project Settings > Plugins. It registers the `AizuInteractionDetectorBus` autoload.
-2. Add an `AizuInteractionManager` (`Node`) anywhere in your scene tree. One is enough, for example under the player.
+1. Enable the plugin in Project > Project Settings > Plugins. It registers two autoloads: `AizuInteractionDetectorBus` and `AizuInputDevice`.
+2. Add an `AizuInteractionManager` (`Node`) anywhere in your scene tree. One is enough, for example under the player. Set its `interactor` to the player and its `detectors` to the detectors you add in the next step.
 3. Add detectors to the player (see [Detecting zones](#detecting-zones)).
 4. Add zones to the objects (see [Making something interactable](#making-something-interactable)).
 
@@ -57,13 +57,40 @@ func _on_interacted() -> void:
 
 | Export | Type | Description |
 |---|---|---|
-| `interaction_trigger` | AizuInteractionTrigger | defines the input that fires the zone |
+| `interaction_trigger` | AizuInteractionTrigger | input of the primary action |
+| `interaction_text` | String | prompt text of the primary action, supports `{interaction_key}` |
+| `actions` | Array[AizuInteractionAction] | more actions, each with its own input and text, see [Several actions](#several-actions-on-one-zone) |
 | `is_detectable` | bool | whether detectors report this zone |
 | `is_interactable` | bool | whether input can trigger `interacted` |
-| `interaction_text` | String | optional label text, supports `{interaction_key}` |
 | `redetect_on_unlock` | bool | auto-recheck detectors after unlock |
 | `enabled` | bool | master switch. When false the zone is locked |
 | `linked_zones` | Array[AizuInteractionZone] | zones that follow this one when it is enabled, disabled, locked or suspended |
+
+### Several actions on one zone
+
+The primary action is `interaction_trigger` plus `interaction_text`: enough for most objects, and `interacted` fires when it is triggered. For more, add `AizuInteractionAction` resources to `actions`.
+
+| Action member | Description |
+|---|---|
+| `id` | name to tell actions apart |
+| `trigger` | the input that fires it |
+| `text` | prompt row, supports `{interaction_key}` |
+| `enabled` | a disabled action is not shown and cannot fire |
+
+Every action that fires emits `action_triggered(action, by)` on the zone, the primary one included. `by` is the `interactor` of the manager.
+
+```gdscript
+func _on_action_triggered(action: AizuInteractionAction, by: Node) -> void:
+	match action.id:
+		&"open":
+			toggle()
+		&"lock":
+			locked = not locked
+```
+
+The prompt shows one row per enabled action: `[E] Open`, `[F] Lock`. If two actions use the same input, the first one wins (the primary action comes first).
+
+Changing `interaction_text`, the actions or their `enabled` flag while the zone is targeted redraws the prompt: no need to lock and unlock the zone to refresh it. An action resource is shared by every scene that uses it: make it unique in the Inspector if instances need to change it separately.
 
 ### Zone flags
 
@@ -183,8 +210,23 @@ Picks the targeted zone and forwards the input.
 | `nearby_zones` | zones reported by any detector that are detectable |
 | `target_changed(zone)` | signal |
 | `nearby_changed(zones)` | signal |
+| `interactor` | node passed as `by` when an action fires, usually the player |
+| `detectors` | detectors that get suspended while the manager is locked |
+| `set_lock(reason, on)` / `is_locked()` | lock the interaction for a named reason |
+| `set_locked(on)` | `set_lock` with a single reason, handy to connect to a signal |
+| `lock_changed(is_locked)` | signal |
 
-On every unhandled input event it asks `current_target.interaction_trigger` whether the event matches. If it does and the zone is interactable, it emits `interacted` on the zone and marks the event as handled.
+On every unhandled input event it goes through the actions of `current_target` and fires the first enabled one whose input matches, then marks the event as handled.
+
+### Locking the interaction
+
+`set_lock(&"menu", true)` stops the interaction, for example during a menu or a cutscene. Several reasons can be active at once and the interaction comes back when all are released. While locked the manager ignores input and suspends the detectors in `detectors`: they report their zones as lost, so the reticle, the prompt, the proximity sprites and the outlines all hide. Zones come back when the lock ends.
+
+With a player that has its own lock, connect the two:
+
+```
+ModularFpc.lock_changed  ->  AizuInteractionManager.set_locked
+```
 
 ## Listening for events
 
@@ -222,6 +264,11 @@ These scripts have no bundled scenes. Create a scene in your game, set the node 
 
 Switches between `texture_active` and `texture_inactive` when a `TARGET` detector finds or loses a zone. Textures are in `src/assets/images/`.
 
+| Export | Description |
+|---|---|
+| `active_scale` | scale while something is targeted. 1 means no size change |
+| `transition_seconds` | time of the change. 0 changes at once |
+
 ```
 Reticle (TextureRect, centered on screen)   script = AizuReticle
 ```
@@ -234,6 +281,19 @@ With `interaction_text = "Press {interaction_key} to open"` and the action bound
 
 Place it where you want it on screen, for example just to the right of the reticle. Set the font and size on the label itself.
 
+### AizuInteractionPrompt (RichTextLabel)
+
+Like `AizuInteractionText`, but `{interaction_key}` can be a glyph drawn inside the text, and every enabled action of the zone gets a row. With the primary action `interaction_text = "{interaction_key} Open"` bound to E, it shows the E glyph followed by `Open`.
+
+| Export | Description |
+|---|---|
+| `glyph_set` | optional [`AizuGlyphSet`](#glyphs). If null, or if an input has no glyph, the key name is written as text instead |
+| `glyph_height` | height of the glyph in pixels |
+| `fade_in_seconds` | fade in time. 0 shows the prompt at once |
+| `fade_out_seconds` | fade out time, short by default. 0 hides it at once |
+
+The rows follow the zone while it is targeted: a change of text, of actions or of the device in use (keyboard or gamepad) redraws them. Use it instead of `AizuInteractionText`, not together with it. The text is centered, so place the node where you want it and give it a width.
+
 ### AizuProximitySprite (Sprite3D)
 
 A hint icon in the world. It starts hidden, fades in when a `PROXIMITY` detector finds its zone, fades out while a `TARGET` detector has it targeted (the reticle takes over), and fades back in if the player stays near but looks away.
@@ -241,7 +301,7 @@ A hint icon in the world. It starts hidden, fades in when a `PROXIMITY` detector
 | Export | Description |
 |---|---|
 | `zone` | the zone it reacts to. If null it reacts to every zone |
-| `icon_set` | optional [`AizuProximityIconSet`](#proximity-icons). If set, the sprite shows the icon of the key that fires the zone |
+| `glyph_set` | optional [`AizuGlyphSet`](#glyphs). If set, the sprite shows the glyph of the input that fires the zone |
 
 Use one sprite per zone when an object has several zones, so each icon sits next to its own interaction point:
 
@@ -258,17 +318,17 @@ Put the zones and the sprites under the node that moves, so they follow it.
 
 If you wrap the sprite in your own scene (for example to add an `AnimationPlayer`), expose a `zone` export on the root and forward it to the sprite in `_ready`. An instanced scene does not let you edit the inner node's exports.
 
-#### Proximity icons
+#### Glyphs
 
-With an `icon_set` the sprite shows the key or mouse button that fires the zone (an `F` for a zone bound to F) instead of a fixed texture. The addon ships no icons, so you build the set from whatever icon pack your game uses.
+With a `glyph_set` the sprite shows the key or button that fires the zone (an `F` for a zone bound to F) instead of a fixed texture. The addon ships no glyphs, so you build the set from whatever icon pack your game uses. The same set also feeds `AizuInteractionPrompt`.
 
-1. Create an `AizuProximityIconSet` resource.
-2. Add one `AizuProximityIcon` per input: set `key` or `mouse_button`, and the `texture`.
-3. Assign the set to the `icon_set` of every `AizuProximitySprite` that should show icons.
+1. Create an `AizuGlyphSet` resource.
+2. Add one `AizuGlyph` per input: set `key`, `mouse_button`, `joypad_button` or `joypad_axis` (triggers), and the `texture`.
+3. Assign the set to the `glyph_set` of every `AizuProximitySprite` and `AizuInteractionPrompt` that should show glyphs.
 
-If the zone's input has no entry in the set, that sprite never shows and nothing is reported as an error. If the action has several events (keyboard and gamepad), the first one with an icon is used. Physical-only keys from the Input Map are shown as the key printed on the player's layout.
+If the zone's input has no entry in the set, that sprite never shows and nothing is reported as an error. The prompt writes the key name instead, so a row is never lost. If the action has several events (keyboard and gamepad), the autoload `AizuInputDevice` tells which device the player used last, and the glyph of that device is used first. Physical-only keys from the Input Map are shown as the key printed on the player's layout.
 
-The choice is per sprite: leave `icon_set` empty on a sprite to keep its own `texture`, for example a generic hint for a zone that has no trigger. One set resource can be shared by all sprites.
+The choice is per sprite: leave `glyph_set` empty on a sprite to keep its own `texture`, for example a generic hint for a zone that has no trigger. One set resource can be shared by all sprites and prompts.
 
 ### AizuInteractableOutline (Node)
 
@@ -335,6 +395,10 @@ zone.interaction_trigger.format_text("Press {interaction_key} to open")
 
 One trigger resource can be shared by several zones.
 
+## Editor helper
+
+Select an `AizuInteractionZone` in the editor: the Inspector has a **Create shape from mesh** button. It adds a box `CollisionShape3D` that fits all the meshes and CSG shapes next to the zone (under the zone's parent), with a small margin. It can be undone, and it does nothing if the zone already has a shape.
+
 ## Collision layers
 
 The addon uses layers 2 and 3 internally. Do not assign other physics objects to these layers.
@@ -351,7 +415,9 @@ The addon uses layers 2 and 3 internally. Do not assign other physics objects to
 | `Could not find type "Aizu..."` | the editor has not scanned the addon yet. Reload the project |
 | Nothing is detected | a detector is missing, or its `area` / `shapecast` export is empty |
 | Proximity works, reticle and key do not | the shapecast detector is still on `PROXIMITY` |
-| Key does nothing | no `AizuInteractionManager` in the scene, or the zone has no `interaction_trigger` |
+| Key does nothing | no `AizuInteractionManager` in the scene, the manager is locked, or the zone has no `interaction_trigger` and no enabled action |
+| A row is missing from the prompt | the action is disabled, has no text, or has no trigger |
+| The prompt shows the key name, not the glyph | the `glyph_set` is empty on the prompt, or has no glyph for that input |
 | Outline never shows | no `AizuOutlineOverlay` in the scene, or the world camera still renders layer 19 |
 | Outline is pixelated or dithered | the meshes are outlined in the world viewport. Check the overlay setup |
 | World looks different after setting up the overlay | another node uses the layer that the world camera now skips |
