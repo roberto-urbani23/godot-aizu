@@ -37,7 +37,7 @@ func recheck_zone(_zone: AizuInteractionZone) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if not shapecast:
+	if not shapecast or _suspended:
 		return
 	_update_target()
 
@@ -82,3 +82,20 @@ func _find_first_zone() -> AizuInteractionZone:
 func _is_occluder(collider: Object) -> bool:
 	var body := collider as CollisionObject3D
 	return body != null and (body.collision_layer & occluder_mask) != 0
+
+
+func _get_active_zones() -> Array[AizuInteractionZone]:
+	var zones: Array[AizuInteractionZone] = []
+	if _current_zone:
+		zones.append(_current_zone)
+	return zones
+
+
+func _on_suspended() -> void:
+	_current_zone = null
+
+
+func _on_resumed() -> void:
+	if shapecast:
+		shapecast.force_shapecast_update()
+		_update_target()

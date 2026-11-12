@@ -15,13 +15,23 @@ func is_triggered(event: InputEvent) -> bool:
 
 
 ## Every input that fires this trigger: the override, or the events of the action.
-func get_input_events() -> Array[InputEvent]:
+## The inputs of the preferred device come first.
+func get_input_events(prefer_gamepad: bool = false) -> Array[InputEvent]:
 	var events: Array[InputEvent] = []
 	if input_override:
 		events.append(input_override)
 	elif interaction_input_action_name and InputMap.has_action(interaction_input_action_name):
 		events.append_array(InputMap.action_get_events(interaction_input_action_name))
-	return events
+
+	var preferred: Array[InputEvent] = []
+	var others: Array[InputEvent] = []
+	for event in events:
+		var is_gamepad_event := event is InputEventJoypadButton or event is InputEventJoypadMotion
+		if is_gamepad_event == prefer_gamepad:
+			preferred.append(event)
+		else:
+			others.append(event)
+	return preferred + others
 
 
 func format_text(text: String) -> String:

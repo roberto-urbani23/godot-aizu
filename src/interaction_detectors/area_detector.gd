@@ -1,7 +1,7 @@
 class_name AizuAreaDetector extends AizuInteractionDetector
 
 const _COLLISION_LAYER := 4  # layer 3: proximity
-const _COLLISION_MASK  := 2  # layer 2: interactable
+const _COLLISION_MASK := 2  # layer 2: interactable
 
 @export var area: Area3D
 
@@ -49,3 +49,10 @@ func _on_area_exited(detected: Area3D) -> void:
 	if _zone_overlaps[zone] <= 0:
 		_zone_overlaps.erase(zone)
 		_report_zone_lost(zone)
+
+
+func _get_active_zones() -> Array[AizuInteractionZone]:
+	var zones: Array[AizuInteractionZone] = []
+	for zone in _zone_overlaps:
+		zones.append(zone)
+	return zones
