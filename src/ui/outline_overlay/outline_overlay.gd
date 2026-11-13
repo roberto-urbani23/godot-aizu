@@ -24,6 +24,8 @@ const _WARM_UP_FRAMES := 3
 
 
 func _ready() -> void:
+	# The overlay covers the screen: it must not eat the mouse events meant for the world.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Outline shaders compile while the overlay is hidden, so the first
 	# outline shown during play does not hitch.
 	visible = false

@@ -11,6 +11,8 @@ var _tween: Tween
 
 
 func _ready() -> void:
+	# A reticle sits where the captured cursor is: it must never take mouse events.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	AizuInteractionDetectorBus.zone_found.connect(_on_zone_found)
 	AizuInteractionDetectorBus.zone_lost.connect(_on_zone_lost)
 	texture = texture_inactive
