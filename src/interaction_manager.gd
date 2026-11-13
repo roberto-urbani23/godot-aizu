@@ -41,8 +41,8 @@ func set_lock(reason: StringName, on: bool) -> void:
 	lock_changed.emit(is_locked())
 
 
-## Shortcut with a single reason, handy to connect to a signal such as
-## ModularFpc.lock_changed.
+## Shortcut with a single reason, handy to connect to the lock signal of
+## whatever controls the player.
 func set_locked(on: bool) -> void:
 	set_lock(_HOST_LOCK, on)
 

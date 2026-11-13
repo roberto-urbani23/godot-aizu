@@ -77,6 +77,8 @@ The primary action is `interaction_trigger` plus `interaction_text`: enough for 
 | `text` | prompt row, supports `{interaction_key}` |
 | `enabled` | a disabled action is not shown and cannot fire |
 
+The prompt texts go through `tr()`: write them in English, that text is the translation key, and add the other languages to your translation file. English needs no entry. Placeholders such as `{interaction_key}` stay in the translated text.
+
 Every action that fires emits `action_triggered(action, by)` on the zone, the primary one included. `by` is the `interactor` of the manager.
 
 ```gdscript
@@ -222,10 +224,10 @@ On every unhandled input event it goes through the actions of `current_target` a
 
 `set_lock(&"menu", true)` stops the interaction, for example during a menu or a cutscene. Several reasons can be active at once and the interaction comes back when all are released. While locked the manager ignores input and suspends the detectors in `detectors`: they report their zones as lost, so the reticle, the prompt, the proximity sprites and the outlines all hide. Zones come back when the lock ends.
 
-With a player that has its own lock, connect the two:
+If your player has its own lock, connect its signal to `set_locked` from the scene or from a script of your game: this addon does not know about any player controller.
 
 ```
-ModularFpc.lock_changed  ->  AizuInteractionManager.set_locked
+player.lock_changed(is_locked)  ->  AizuInteractionManager.set_locked(is_locked)
 ```
 
 ## Listening for events
@@ -302,6 +304,8 @@ A hint icon in the world. It starts hidden, fades in when a `PROXIMITY` detector
 |---|---|
 | `zone` | the zone it reacts to. If null it reacts to every zone |
 | `glyph_set` | optional [`AizuGlyphSet`](#glyphs). If set, the sprite shows the glyph of the input that fires the zone |
+| `render_in_overlay` | draw the sprite on the overlay layer, outside a post-processed world view |
+| `occlusion_mask` | physics layers that hide the sprite while they are between the camera and it. 0 turns it off |
 
 Use one sprite per zone when an object has several zones, so each icon sits next to its own interaction point:
 
