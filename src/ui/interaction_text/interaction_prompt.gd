@@ -25,6 +25,7 @@ var _refresh_queued: bool = false
 
 
 func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
 	bbcode_enabled = false
 	fit_content = true
@@ -100,7 +101,7 @@ func _add_row(action: AizuInteractionAction) -> void:
 	if glyph_set:
 		glyph = glyph_set.get_glyph_for_trigger(action.trigger)
 
-	var parts := action.text.split(_PLACEHOLDER)
+	var parts := tr(action.text).split(_PLACEHOLDER)
 	for i in parts.size():
 		if i > 0:
 			if glyph:

@@ -55,7 +55,7 @@ func _refresh() -> void:
 		for action in _zone.get_actions():
 			if not action.can_trigger():
 				continue
-			var line := action.trigger.format_text(action.text)
+			var line := action.trigger.format_text(tr(action.text))
 			if not line.is_empty():
 				lines.append(line)
 	text = "\n".join(lines)
