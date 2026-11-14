@@ -11,6 +11,9 @@ const _PLACEHOLDER := "{interaction_key}"
 ## Glyphs for the inputs. If null, or if an input has no glyph, its name is
 ## written as plain text instead.
 @export var glyph_set: AizuGlyphSet
+## Manager to follow while the player holds something: the prompt then shows the
+## drop and throw rows. Without it the prompt only follows the targeted zone.
+@export var manager: AizuInteractionManager
 ## Height of the inline glyph, in pixels.
 @export var glyph_height: int = 28
 ## Fade in time. 0 shows the prompt at once.
@@ -33,6 +36,8 @@ func _ready() -> void:
 	AizuInteractionDetectorBus.zone_found.connect(_on_zone_found)
 	AizuInteractionDetectorBus.zone_lost.connect(_on_zone_lost)
 	AizuInputDevice.device_changed.connect(_on_device_changed)
+	if manager:
+		manager.held_changed.connect(_on_held_changed)
 
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
@@ -57,6 +62,10 @@ func _on_device_changed(_is_gamepad: bool) -> void:
 	_queue_refresh()
 
 
+func _on_held_changed(_grabbable: AizuGrabbable) -> void:
+	_queue_refresh()
+
+
 func _forget_zone() -> void:
 	if is_instance_valid(_zone) and _zone.prompt_changed.is_connected(_queue_refresh):
 		_zone.prompt_changed.disconnect(_queue_refresh)
@@ -75,10 +84,10 @@ func _queue_refresh() -> void:
 
 func _refresh() -> void:
 	_refresh_queued = false
-	if not is_instance_valid(_zone):
-		return
 	var rows: Array[AizuInteractionAction] = []
-	if _zone.can_be_triggered():
+	if manager and manager.is_holding():
+		rows = manager.get_held_actions()
+	elif is_instance_valid(_zone) and _zone.can_be_triggered():
 		for action in _zone.get_actions():
 			if action.can_trigger() and not action.text.is_empty():
 				rows.append(action)

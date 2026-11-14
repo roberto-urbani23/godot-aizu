@@ -3,18 +3,56 @@ class_name AizuInteractionManager extends Node
 signal target_changed(zone: AizuInteractionZone)
 signal nearby_changed(zones: Array[AizuInteractionZone])
 signal lock_changed(is_locked: bool)
+## A grabbable was grabbed.
+signal grabbed(grabbable: AizuGrabbable)
+## The held grabbable was let go, dropped or thrown.
+signal released(grabbable: AizuGrabbable)
+## The held grabbable was thrown, right after [signal released].
+signal thrown(grabbable: AizuGrabbable)
+## What is held changed: the grabbable, or null when nothing is held.
+signal held_changed(grabbable: AizuGrabbable)
 
 ## Reported as 'by' when a zone is triggered. Usually the player.
 @export var interactor: Node
 ## Detectors to suspend while the manager is locked, so that the UI hides too.
 @export var detectors: Array[AizuInteractionDetector]
 
+@export_group("Grab")
+## Where the held body is carried to, and the direction it is thrown along (its
+## -Z axis). Usually a Marker3D in front of the camera.
+@export var grab_point: Marker3D
+## Input that throws the held body. Dropping uses the input that grabbed it.
+@export var throw_trigger: AizuInteractionTrigger
+## Impulse of a throw, multiplied by the throw_force_multiplier of the grabbable.
+## An impulse depends on the mass: a body of 1 kg leaves at this speed in m/s.
+@export_range(0.0, 1000.0, 0.1, "or_greater") var base_throw_force: float = 8.0
+## How hard the held body is pulled to the grab point, in 1/s: the speed is the
+## distance times this.
+@export_range(0.0, 100.0, 0.1, "or_greater") var grab_stiffness: float = 20.0
+## Speed limit of the pull, in m/s. The body also turns to the grab point's
+## orientation, limited by the same number of radians per second.
+@export_range(0.0, 100.0, 0.1, "or_greater") var max_grab_speed: float = 12.0
+## Prompt rows shown while something is held. [code]{interaction_key}[/code]
+## stands for the input, and the text goes through tr() like any prompt.
+@export var drop_text: String = "{interaction_key} Drop"
+@export var throw_text: String = "{interaction_key} Throw"
+
 var current_target: AizuInteractionZone
+## The grabbable being carried, or null.
+var held: AizuGrabbable
 var nearby_zones: Array[AizuInteractionZone] = []
 
 # detector -> { zone: true }
 var _detector_candidates: Dictionary = {}
 var _locks: Dictionary[StringName, bool] = {}
+var _drop_action: AizuInteractionAction = AizuInteractionAction.new()
+var _throw_action: AizuInteractionAction = AizuInteractionAction.new()
+# Body state to restore on release.
+var _saved_gravity_scale: float
+var _saved_can_sleep: bool
+# Orientation of the body relative to the grab point, kept from the grab.
+var _grab_local_basis: Basis
+var _held_exception: PhysicsBody3D
 
 const _HOST_LOCK := &"host"
 
@@ -23,6 +61,10 @@ func _ready() -> void:
 	AizuInteractionDetectorBus.zone_found.connect(_on_zone_found)
 	AizuInteractionDetectorBus.zone_lost.connect(_on_zone_lost)
 	AizuInteractionDetectorBus.zone_locked.connect(_on_zone_locked)
+	AizuInteractionDetectorBus.grab_requested.connect(_on_grab_requested)
+	_drop_action.id = &"drop"
+	_throw_action.id = &"throw"
+	set_physics_process(false)
 
 
 ## Locks the interaction for a reason (menu, cutscene, dialogue...). Several
@@ -35,9 +77,9 @@ func set_lock(reason: StringName, on: bool) -> void:
 		_locks.erase(reason)
 	if is_locked() == was_locked:
 		return
-	for detector in detectors:
-		if detector:
-			detector.set_suspended(is_locked())
+	if is_locked():
+		drop()
+	_sync_detectors()
 	lock_changed.emit(is_locked())
 
 
@@ -49,6 +91,144 @@ func set_locked(on: bool) -> void:
 
 func is_locked() -> bool:
 	return not _locks.is_empty()
+
+
+func is_holding() -> bool:
+	return held != null
+
+
+## Grabs a grabbable. Fails, returning false, when something is already held,
+## the manager is locked, there is no grab point or the body is frozen.
+func grab(grabbable: AizuGrabbable) -> bool:
+	if held != null or is_locked() or not is_instance_valid(grabbable):
+		return false
+	var body := grabbable.body
+	if not is_instance_valid(body) or not body.is_inside_tree() or body.freeze:
+		return false
+	if grab_point == null:
+		push_warning("AizuInteractionManager needs a grab_point to grab.")
+		return false
+
+	held = grabbable
+	grabbable.is_grabbed = true
+	_saved_gravity_scale = body.gravity_scale
+	_saved_can_sleep = body.can_sleep
+	body.gravity_scale = 0.0
+	body.can_sleep = false
+	body.sleeping = false
+	_held_exception = interactor as PhysicsBody3D
+	if _held_exception:
+		body.add_collision_exception_with(_held_exception)
+	_grab_local_basis = (
+		grab_point.global_basis.orthonormalized().inverse() * body.global_basis.orthonormalized()
+	)
+	body.tree_exiting.connect(drop, CONNECT_ONE_SHOT)
+	# Locked zones are lost by the detectors, and the targeting is suspended so
+	# that no other zone shows a prompt the manager would not honor.
+	grabbable.zone.lock()
+	_sync_detectors()
+	set_physics_process(true)
+	grabbable.grabbed.emit()
+	grabbed.emit(grabbable)
+	held_changed.emit(grabbable)
+	return true
+
+
+## Lets the held body go. It keeps the velocity it had.
+func drop() -> void:
+	_release(false)
+
+
+## Lets the held body go with an impulse along the -Z axis of the grab point.
+func throw() -> void:
+	_release(true)
+
+
+## Rows to show while something is held: drop, then throw. Each one only when
+## it has an input.
+func get_held_actions() -> Array[AizuInteractionAction]:
+	var rows: Array[AizuInteractionAction] = []
+	if held == null:
+		return rows
+	var grab_action := held.get_grab_action()
+	if grab_action:
+		_drop_action.trigger = grab_action.trigger
+		_drop_action.text = drop_text
+		if _drop_action.can_trigger():
+			rows.append(_drop_action)
+	_throw_action.trigger = throw_trigger
+	_throw_action.text = throw_text
+	if _throw_action.can_trigger():
+		rows.append(_throw_action)
+	return rows
+
+
+func _release(with_throw: bool) -> void:
+	if held == null:
+		return
+	var grabbable := held
+	held = null
+	set_physics_process(false)
+
+	var body := grabbable.body
+	grabbable.is_grabbed = false
+	if is_instance_valid(body):
+		if body.tree_exiting.is_connected(drop):
+			body.tree_exiting.disconnect(drop)
+		body.gravity_scale = _saved_gravity_scale
+		body.can_sleep = _saved_can_sleep
+		if is_instance_valid(_held_exception):
+			body.remove_collision_exception_with(_held_exception)
+		body.sleeping = false
+		if with_throw and body.is_inside_tree() and grab_point:
+			var direction := -grab_point.global_basis.z
+			body.apply_central_impulse(
+				direction * base_throw_force * grabbable.throw_force_multiplier
+			)
+	_held_exception = null
+	if is_instance_valid(grabbable.zone):
+		grabbable.zone.unlock()
+	_sync_detectors()
+
+	grabbable.released.emit()
+	released.emit(grabbable)
+	if with_throw:
+		grabbable.thrown.emit()
+		thrown.emit(grabbable)
+	held_changed.emit(null)
+
+
+# Detectors rest while locked or carrying something.
+func _sync_detectors() -> void:
+	var suspended := is_locked() or held != null
+	for detector in detectors:
+		if detector:
+			detector.set_suspended(suspended)
+
+
+func _on_grab_requested(grabbable: AizuGrabbable, by: Node) -> void:
+	if by == interactor:
+		grab(grabbable)
+
+
+func _physics_process(_delta: float) -> void:
+	if held == null or not is_instance_valid(held.body) or grab_point == null:
+		return
+	var body := held.body
+	var to_point := grab_point.global_position - body.global_position
+	body.linear_velocity = (to_point * grab_stiffness).limit_length(max_grab_speed)
+
+	# Turn by the shortest rotation to the orientation the body had at the grab,
+	# relative to the grab point.
+	var target := (
+		(grab_point.global_basis.orthonormalized() * _grab_local_basis).get_rotation_quaternion()
+	)
+	var delta_rotation := target * body.global_basis.orthonormalized().get_rotation_quaternion().inverse()
+	if delta_rotation.w < 0.0:
+		delta_rotation = -delta_rotation
+	var angle := delta_rotation.get_angle()
+	var axis := delta_rotation.get_axis() if angle > 0.0001 else Vector3.ZERO
+	body.angular_velocity = (axis * angle * grab_stiffness).limit_length(max_grab_speed)
 
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
@@ -113,7 +293,12 @@ func _on_zone_locked(zone: AizuInteractionZone) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_locked() or not is_instance_valid(current_target):
+	if is_locked():
+		return
+	if held != null:
+		_handle_held_input(event)
+		return
+	if not is_instance_valid(current_target):
 		return
 	if not current_target.can_be_triggered():
 		return
@@ -124,3 +309,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			current_target.trigger_action(action, interactor)
 			get_viewport().set_input_as_handled()
 			return
+
+
+func _handle_held_input(event: InputEvent) -> void:
+	if throw_trigger and throw_trigger.is_triggered(event):
+		throw()
+		get_viewport().set_input_as_handled()
+		return
+	var grab_action := held.get_grab_action()
+	if grab_action and grab_action.can_trigger() and grab_action.trigger.is_triggered(event):
+		drop()
+		get_viewport().set_input_as_handled()

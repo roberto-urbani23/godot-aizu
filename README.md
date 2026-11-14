@@ -217,6 +217,10 @@ Picks the targeted zone and forwards the input.
 | `set_lock(reason, on)` / `is_locked()` | lock the interaction for a named reason |
 | `set_locked(on)` | `set_lock` with a single reason, handy to connect to a signal |
 | `lock_changed(is_locked)` | signal |
+| `held` / `is_holding()` | the grabbable being carried, or null, see [Grabbing](#grabbing-and-throwing) |
+| `grab(grabbable)` / `drop()` / `throw()` | grab, let go and throw by code |
+| `grab_point`, `throw_trigger`, `base_throw_force`, `grab_stiffness`, `max_grab_speed`, `drop_text`, `throw_text` | grab settings, see [Grabbing](#grabbing-and-throwing) |
+| `grabbed`, `released`, `thrown`, `held_changed` | signals |
 
 On every unhandled input event it goes through the actions of `current_target` and fires the first enabled one whose input matches, then marks the event as handled.
 
@@ -230,6 +234,46 @@ If your player has its own lock, connect its signal to `set_locked` from the sce
 player.lock_changed(is_locked)  ->  AizuInteractionManager.set_locked(is_locked)
 ```
 
+## Grabbing and throwing
+
+A player can carry a `RigidBody3D` around and throw it. Add an `AizuGrabbable` (`Node`) next to the body, wire its exports and give the zone an action that grabs.
+
+```
+Crate (RigidBody3D)
+  CollisionShape3D
+  AizuInteractionZone (Area3D)     <- primary action grabs
+    CollisionShape3D
+  AizuGrabbable (Node)             <- body: Crate, zone: the zone above
+```
+
+| `AizuGrabbable` export | Description |
+|---|---|
+| `body` | the body carried. Frozen bodies cannot be grabbed |
+| `zone` | the zone that offers the grab, usually a child of the body |
+| `grab_action_id` | id of the action of the zone that grabs. `primary` (the primary action) by default |
+| `throw_force_multiplier` | multiplies the base throw force of the manager. 1 changes nothing |
+
+Signals `grabbed`, `released` (drop or throw) and `thrown` (only a throw, right after `released`) fire on the grabbable and on the manager.
+
+On the `AizuInteractionManager`, set `grab_point` to a `Marker3D`, usually a child of the camera a little in front of it. It is where the body is carried and the direction of a throw (its -Z axis).
+
+| Manager export | Description |
+|---|---|
+| `grab_point` | where the held body is carried, and the throw direction |
+| `throw_trigger` | input that throws. Dropping uses the input that grabbed |
+| `base_throw_force` | impulse of a throw. Multiplied by the `throw_force_multiplier` of the grabbable. As an impulse it depends on the mass: a body of 1 kg leaves at this speed in m/s |
+| `grab_stiffness` | how hard the body is pulled to the grab point, in 1/s |
+| `max_grab_speed` | speed limit of that pull, in m/s (and in radians per second for the turn) |
+| `drop_text`, `throw_text` | rows of the prompt while holding. They go through `tr()` |
+
+How it works:
+
+- The body keeps real physics while held: the manager sets its velocity every physics frame to pull it to the grab point, so it collides with the world and pushes other bodies. Gravity is off while held. It keeps the orientation it had at the grab, relative to the grab point, so it turns with the camera. It is never dropped for being far: it keeps pulling.
+- It does not collide with the `interactor` while held, when the interactor is a physics body.
+- While holding, the zone of the body is locked and the detectors are suspended, so no other zone is targeted. The input of the grab action drops the body, which keeps its velocity. `throw_trigger` throws it.
+- A lock of the manager (`set_lock`) drops the body. A body freed while held is forgotten.
+- Set the `manager` export of `AizuInteractionPrompt` or `AizuInteractionText` and they show the drop and throw rows while something is held.
+
 ## Listening for events
 
 Connect to `AizuInteractionDetectorBus` from anywhere:
@@ -239,6 +283,7 @@ Connect to `AizuInteractionDetectorBus` from anywhere:
 | `zone_found(detector, zone)` | a detector starts reporting a zone |
 | `zone_lost(detector, zone)` | a detector stops reporting a zone, or the zone is locked |
 | `zone_locked(zone)` | a zone became locked |
+| `grab_requested(grabbable, by)` | the grab action of a grabbable was triggered. The manager whose `interactor` is `by` grabs it |
 | `zone_unlocked(zone)` | a zone became unlocked |
 
 ```gdscript
@@ -283,6 +328,8 @@ With `interaction_text = "Press {interaction_key} to open"` and the action bound
 
 Place it where you want it on screen, for example just to the right of the reticle. Set the font and size on the label itself.
 
+Set its optional `manager` export to show the drop and throw rows while the player holds something.
+
 ### AizuInteractionPrompt (RichTextLabel)
 
 Like `AizuInteractionText`, but `{interaction_key}` can be a glyph drawn inside the text, and every enabled action of the zone gets a row. With the primary action `interaction_text = "{interaction_key} Open"` bound to E, it shows the E glyph followed by `Open`.
@@ -293,6 +340,7 @@ Like `AizuInteractionText`, but `{interaction_key}` can be a glyph drawn inside 
 | `glyph_height` | height of the glyph in pixels |
 | `fade_in_seconds` | fade in time. 0 shows the prompt at once |
 | `fade_out_seconds` | fade out time, short by default. 0 hides it at once |
+| `manager` | optional. While it holds something the prompt shows the drop and throw rows |
 
 The rows follow the zone while it is targeted: a change of text, of actions or of the device in use (keyboard or gamepad) redraws them. Use it instead of `AizuInteractionText`, not together with it. The text is centered, so place the node where you want it and give it a width.
 
