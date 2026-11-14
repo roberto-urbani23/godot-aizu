@@ -34,6 +34,7 @@ func _make_copy(source: MeshInstance3D) -> MeshInstance3D:
 	copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	copy.material_override = _get_mask_material()
 	copy.material_overlay = outline_material
+	copy.set_instance_shader_parameter(&"outline_center", source.get_aabb().get_center())
 	copy.visible = false
 	source.add_child.call_deferred(copy) # the scene may still be setting up its children
 	return copy
