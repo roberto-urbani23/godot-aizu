@@ -198,6 +198,16 @@ func _release(with_throw: bool) -> void:
 	held_changed.emit(null)
 
 
+# The point the body is carried by is its center of mass, not its origin: the
+# origin can be anywhere (a fish whose mesh sits above its pivot), and carrying
+# it would put the body in a different spot for every orientation it was grabbed in.
+func _get_body_center(body: RigidBody3D) -> Vector3:
+	var state := PhysicsServer3D.body_get_direct_state(body.get_rid())
+	if state == null:
+		return body.global_position
+	return body.global_position + state.center_of_mass
+
+
 # Detectors rest while locked or carrying something.
 func _sync_detectors() -> void:
 	var suspended := is_locked() or held != null
@@ -215,7 +225,7 @@ func _physics_process(_delta: float) -> void:
 	if held == null or not is_instance_valid(held.body) or grab_point == null:
 		return
 	var body := held.body
-	var to_point := grab_point.global_position - body.global_position
+	var to_point := grab_point.global_position - _get_body_center(body)
 	body.linear_velocity = (to_point * grab_stiffness).limit_length(max_grab_speed)
 
 	# Turn by the shortest rotation to the orientation the body had at the grab,

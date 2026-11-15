@@ -268,7 +268,7 @@ On the `AizuInteractionManager`, set `grab_point` to a `Marker3D`, usually a chi
 
 How it works:
 
-- The body keeps real physics while held: the manager sets its velocity every physics frame to pull it to the grab point, so it collides with the world and pushes other bodies. Gravity is off while held. It keeps the orientation it had at the grab, relative to the grab point, so it turns with the camera. It is never dropped for being far: it keeps pulling.
+- The body keeps real physics while held: the manager sets its velocity every physics frame to pull its center of mass to the grab point, so it collides with the world and pushes other bodies. Gravity is off while held. It keeps the orientation it had at the grab, relative to the grab point, so it turns with the camera. It is never dropped for being far: it keeps pulling.
 - It does not collide with the `interactor` while held, when the interactor is a physics body.
 - While holding, the zone of the body is locked and the detectors are suspended, so no other zone is targeted. The input of the grab action drops the body, which keeps its velocity. `throw_trigger` throws it.
 - A lock of the manager (`set_lock`) drops the body. A body freed while held is forgotten.
