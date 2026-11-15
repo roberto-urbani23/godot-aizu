@@ -490,6 +490,42 @@ zone.interaction_trigger.format_text("Press {interaction_key} to open")
 
 One trigger resource can be shared by several zones.
 
+## Setup wizard
+
+Right click a node in the Scene dock and choose **Aizu: make interactable...** (or use it from Project > Tools, which works on the selected node or the root of the scene). A dialog walks you through the steps, with Back and Next, and creates and connects everything only when you confirm in the last step.
+
+If the object already has nodes of the addon, the same command opens the wizard to **edit** them: every step is filled with what the scene has now, and you can change values, add what is missing and remove what you do not want. See [Editing an object](#editing-an-object-with-the-wizard).
+
+| Step | What it does |
+|---|---|
+| Object | shows what was found (meshes, RigidBody3D, nodes of the addon already there) and sets the `display_name` |
+| Zone | creates the `AizuInteractionZone` with its primary action (pick an input action of the project and a prompt text), a box `CollisionShape3D` that covers the meshes, and extra actions if you want them. `(none)` makes a zone with no action of its own |
+| Outline | adds an `AizuInteractableOutline` for the meshes. Skippable |
+| Grab | adds an `AizuGrabbable`. If there is no `RigidBody3D` it can create one and move the meshes under it, with a box collision. Kinds: pick existing ones or type a name to create a new `.tres` (in a folder the wizard remembers). Optional `GrabHandle` marker and throw force. Skippable |
+| Receiver | adds an `AizuItemReceiver` with one `AizuItemUse` for each kind it accepts. Skippable |
+| Script | creates a script for the object, or adds to the one it has. Skippable |
+| Summary | lists what will be created, reused and written. Nothing exists until you press **Create** |
+
+What it does and does not do:
+
+- Everything it creates is a normal node with the addon's scripts and exports already assigned. Collision shapes are plain boxes around the meshes: adjust them afterwards.
+- Nothing is changed that you did not change in a step: with nothing touched, the summary says "Nothing to change".
+- The nodes are created as a single action of the editor: one undo removes them. Files that were written (new kinds, a new script, lines added to a script) stay.
+- The script gets an `@export` for each node, the `connect` lines in `_ready()` and an empty function for each signal. If the object already has a script, **only lines are added**, never changed or removed: new exports before the first function, connections at the end of `_ready()` (or a new `_ready()`), empty handlers at the end of the file. Something that is already declared or connected is skipped. The summary shows the exact lines first.
+- The input actions in the dropdowns are the ones of the project (the `ui_` ones are left out).
+- It does not work on an instanced scene whose children are not editable, and it cannot change a script that is built into the scene.
+
+### Editing an object with the wizard
+
+The wizard reads the zone, its extra actions, the outline, the grabbable (kinds, `GrabHandle`, throw force) and the receiver (uses) and shows them in the steps. In the summary every line starts with a sign: `+` adds, `~` changes, `-` removes, `=` is left as it is.
+
+- **Change:** the display name, the prompt texts, the inputs, the extra actions and uses (add, change, remove), the kinds, the throw force, the handle. The ids of the actions and uses that exist are kept, so the script that matches on them keeps working.
+- **Add:** the parts that are missing, as in the creation. If the wizard creates the body for an object whose zone is outside it, the zone is moved under the body too, because it has to follow the body when it is carried.
+- **Remove:** untick the step of a part (Outline, Grab, Receiver) and its nodes are removed (the outline; the grabbable and its `GrabHandle`; the receiver). The zone cannot be removed in the wizard, only edited. Meshes, the RigidBody3D, collision shapes and the `.tres` files of the kinds are never touched: taking a kind out of a grabbable only removes the reference.
+- **Shared resources:** an input, a text or a kind that comes from a `.tres` file used by other scenes (for example `interact_trigger.tres`) is never changed in the file. When you change it, the step shows "shared with other scenes" and asks for a **name**: the changed copy is saved as a new `.tres` next to the original, and this object uses it. You cannot go on without a name, and the same name cannot be used twice. A resource that lives inside the scene is changed in place.
+- **Script:** the same rule as before, lines are only added. If you remove a part, the lines of the script that mention it stay, and the summary lists them with their line numbers so you can clean them up.
+- One Ctrl+Z undoes the whole edit (the files that were written stay).
+
 ## Editor helper
 
 Select an `AizuInteractionZone` in the editor: the Inspector has a **Create shape from mesh** button. It adds a box `CollisionShape3D` that fits all the meshes and CSG shapes next to the zone (under the zone's parent), with a small margin. It can be undone, and it does nothing if the zone already has a shape.
