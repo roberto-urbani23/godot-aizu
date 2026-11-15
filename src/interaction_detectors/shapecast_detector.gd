@@ -36,6 +36,16 @@ func recheck_zone(_zone: AizuInteractionZone) -> void:
 	_update_target()
 
 
+func ignore_body(body: CollisionObject3D) -> void:
+	if shapecast:
+		shapecast.add_exception(body)
+
+
+func unignore_body(body: CollisionObject3D) -> void:
+	if shapecast:
+		shapecast.remove_exception(body)
+
+
 func _physics_process(_delta: float) -> void:
 	if not shapecast or _suspended:
 		return

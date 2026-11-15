@@ -116,6 +116,7 @@ func grab(grabbable: AizuGrabbable) -> bool:
 	body.gravity_scale = 0.0
 	body.can_sleep = false
 	body.sleeping = false
+	grabbable.protect_collision()
 	_held_exception = interactor as PhysicsBody3D
 	if _held_exception:
 		body.add_collision_exception_with(_held_exception)
@@ -123,10 +124,18 @@ func grab(grabbable: AizuGrabbable) -> bool:
 		grab_point.global_basis.orthonormalized().inverse() * body.global_basis.orthonormalized()
 	)
 	body.tree_exiting.connect(drop, CONNECT_ONE_SHOT)
-	# Locked zones are lost by the detectors, and the targeting is suspended so
-	# that no other zone shows a prompt the manager would not honor.
+	# The zone of the body is locked so it is not targeted while carried. The
+	# detectors then report again, and only the zones with a use for what is held
+	# are of use now.
 	grabbable.zone.lock()
-	_sync_detectors()
+	AizuInteractionDetectorBus.set_held(grabbable.kinds)
+	# The body in front of the camera, and its zone, must not hide what the player
+	# aims at: a cast stops at the first thing it touches.
+	for detector in detectors:
+		if detector:
+			detector.ignore_body(body)
+			detector.ignore_body(grabbable.zone)
+	_refresh_detectors()
 	set_physics_process(true)
 	grabbable.grabbed.emit()
 	grabbed.emit(grabbable)
@@ -144,21 +153,25 @@ func throw() -> void:
 	_release(true)
 
 
-## Rows to show while something is held: drop, then throw. Each one only when
-## it has an input.
+## Rows to show while something is held: the item uses of the targeted zone,
+## then drop and throw. Each one only when it has an input. Drop and throw give
+## way to a use that shares their input.
 func get_held_actions() -> Array[AizuInteractionAction]:
 	var rows: Array[AizuInteractionAction] = []
 	if held == null:
 		return rows
+	for action in _get_target_uses():
+		if not action.text.is_empty():
+			rows.append(action)
 	var grab_action := held.get_grab_action()
 	if grab_action:
 		_drop_action.trigger = grab_action.trigger
 		_drop_action.text = drop_text
-		if _drop_action.can_trigger():
+		if _drop_action.can_trigger() and not _conflicts_with_uses(_drop_action.trigger):
 			rows.append(_drop_action)
 	_throw_action.trigger = throw_trigger
 	_throw_action.text = throw_text
-	if _throw_action.can_trigger():
+	if _throw_action.can_trigger() and not _conflicts_with_uses(_throw_action.trigger):
 		rows.append(_throw_action)
 	return rows
 
@@ -180,6 +193,7 @@ func _release(with_throw: bool) -> void:
 		if is_instance_valid(_held_exception):
 			body.remove_collision_exception_with(_held_exception)
 		body.sleeping = false
+		grabbable.restore_collision_when_at_rest()
 		if with_throw and body.is_inside_tree() and grab_point:
 			var direction := -grab_point.global_basis.z
 			body.apply_central_impulse(
@@ -188,7 +202,14 @@ func _release(with_throw: bool) -> void:
 	_held_exception = null
 	if is_instance_valid(grabbable.zone):
 		grabbable.zone.unlock()
-	_sync_detectors()
+	AizuInteractionDetectorBus.clear_held()
+	for detector in detectors:
+		if detector:
+			if is_instance_valid(body):
+				detector.unignore_body(body)
+			if is_instance_valid(grabbable.zone):
+				detector.unignore_body(grabbable.zone)
+	_refresh_detectors()
 
 	grabbable.released.emit()
 	released.emit(grabbable)
@@ -217,12 +238,23 @@ func _get_carried_point(grabbable: AizuGrabbable) -> Vector3:
 	return _get_body_center(grabbable.body)
 
 
-# Detectors rest while locked or carrying something.
+# Detectors rest while locked.
 func _sync_detectors() -> void:
-	var suspended := is_locked() or held != null
+	var suspended := is_locked()
 	for detector in detectors:
 		if detector:
 			detector.set_suspended(suspended)
+
+
+# Makes the detectors report their zones again, to judge them against what is
+# held now. A locked manager has them suspended already.
+func _refresh_detectors() -> void:
+	if is_locked():
+		return
+	for detector in detectors:
+		if detector:
+			detector.set_suspended(true)
+			detector.set_suspended(false)
 
 
 func _on_grab_requested(grabbable: AizuGrabbable, by: Node) -> void:
@@ -337,6 +369,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _handle_held_input(event: InputEvent) -> void:
+	# A use on the zone being aimed at wins over drop and throw.
+	for use in _get_target_uses():
+		if use.trigger.is_triggered(event):
+			var receiver := current_target.find_receiver(use as AizuItemUse)
+			if receiver:
+				receiver.use(use as AizuItemUse, held, interactor)
+				get_viewport().set_input_as_handled()
+				return
 	if throw_trigger and throw_trigger.is_triggered(event):
 		throw()
 		get_viewport().set_input_as_handled()
@@ -345,3 +385,23 @@ func _handle_held_input(event: InputEvent) -> void:
 	if grab_action and grab_action.can_trigger() and grab_action.trigger.is_triggered(event):
 		drop()
 		get_viewport().set_input_as_handled()
+
+
+# The enabled item uses of the zone being aimed at, for what is held.
+func _get_target_uses() -> Array[AizuInteractionAction]:
+	var uses: Array[AizuInteractionAction] = []
+	if held == null or not is_instance_valid(current_target):
+		return uses
+	if not current_target.can_be_triggered():
+		return uses
+	for action in current_target.get_actions():
+		if action.can_trigger():
+			uses.append(action)
+	return uses
+
+
+func _conflicts_with_uses(trigger: AizuInteractionTrigger) -> bool:
+	for use in _get_target_uses():
+		if use.trigger.conflicts_with(trigger):
+			return true
+	return false

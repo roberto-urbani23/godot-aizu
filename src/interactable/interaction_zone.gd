@@ -25,6 +25,14 @@ signal prompt_changed
 @export var is_detectable: bool = true
 @export var redetect_on_unlock: bool = true
 
+## Optional name of what the zone belongs to ("Door", "Old merchant"). The prompt
+## shows it as its first line while the zone is targeted, even if the zone has no
+## action to offer. It goes through tr(). Empty shows nothing.
+@export var display_name: String:
+	set(value):
+		display_name = value
+		prompt_changed.emit()
+
 ## Prompt text of the primary action.
 @export var interaction_text: String:
 	set(value):
@@ -58,6 +66,7 @@ signal prompt_changed
 @export var linked_zones: Array[AizuInteractionZone]
 
 var _primary: AizuInteractionAction = AizuInteractionAction.new()
+var _receivers: Array[AizuItemReceiver] = []
 var _is_locked: bool = false
 var _manual_lock: bool = false
 var _suspensions: int = 0
@@ -71,9 +80,20 @@ func _ready() -> void:
 			zone.enabled = false
 
 
-## Every action of the zone, the primary one first. The primary action exists
-## only when interaction_trigger is set.
+## The actions on offer now: the own actions of the zone, or while a grabbable
+## is held the item uses for it.
 func get_actions() -> Array[AizuInteractionAction]:
+	if AizuInteractionDetectorBus.is_holding:
+		var uses: Array[AizuInteractionAction] = []
+		for use in get_item_uses():
+			uses.append(use)
+		return uses
+	return get_own_actions()
+
+
+## Every action of the zone, the primary one first, whatever is held. The primary
+## action exists only when interaction_trigger is set.
+func get_own_actions() -> Array[AizuInteractionAction]:
 	var all: Array[AizuInteractionAction] = []
 	if interaction_trigger:
 		_primary.id = PRIMARY_ACTION_ID
@@ -93,16 +113,60 @@ func trigger_action(action: AizuInteractionAction, by: Node) -> void:
 		interacted.emit()
 
 
+## The item uses of the receivers of this zone that accept the grabbable held
+## now. Empty when nothing is held.
+func get_item_uses() -> Array[AizuItemUse]:
+	var found: Array[AizuItemUse] = []
+	if not AizuInteractionDetectorBus.is_holding:
+		return found
+	for receiver in _receivers:
+		found.append_array(receiver.get_uses_for(AizuInteractionDetectorBus.held_kinds))
+	return found
+
+
+## The receiver that owns [param use], or null.
+func find_receiver(use: AizuItemUse) -> AizuItemReceiver:
+	for receiver in _receivers:
+		if receiver.uses.has(use):
+			return receiver
+	return null
+
+
+## Called by an [AizuItemReceiver] that offers uses on this zone.
+func register_receiver(receiver: AizuItemReceiver) -> void:
+	if not _receivers.has(receiver):
+		_receivers.append(receiver)
+		prompt_changed.emit()
+
+
+func unregister_receiver(receiver: AizuItemReceiver) -> void:
+	if _receivers.has(receiver):
+		_receivers.erase(receiver)
+		prompt_changed.emit()
+
+
+## Redraws the prompt and, while something is held, reports the zone as found or
+## lost again, because the item uses it accepts may have changed.
+func refresh_prompt_and_availability() -> void:
+	prompt_changed.emit()
+	if not is_inside_tree() or _is_locked or not AizuInteractionDetectorBus.is_holding:
+		return
+	if _fits_held_item():
+		AizuInteractionDetectorBus.zone_unlocked.emit(self)
+	else:
+		AizuInteractionDetectorBus.zone_locked.emit(self)
+
+
 func is_locked() -> bool:
 	return _is_locked
 
 
 func can_be_detected() -> bool:
-	return is_detectable and not _is_locked
+	return is_detectable and not _is_locked and _fits_held_item()
 
 
 func can_be_triggered() -> bool:
-	return is_interactable and not _is_locked
+	return is_interactable and not _is_locked and _fits_held_item()
 
 
 ## Locks the zone and its linked zones until [method unlock] is called.
@@ -151,3 +215,11 @@ func _sync_lock() -> void:
 		AizuInteractionDetectorBus.zone_locked.emit(self)
 	else:
 		AizuInteractionDetectorBus.zone_unlocked.emit(self)
+
+
+# With a grabbable held a zone is of use only if it has an item use for it. With
+# nothing held a zone that only has receivers has nothing to offer.
+func _fits_held_item() -> bool:
+	if AizuInteractionDetectorBus.is_holding:
+		return not get_item_uses().is_empty()
+	return interaction_trigger != null or not actions.is_empty() or _receivers.is_empty()

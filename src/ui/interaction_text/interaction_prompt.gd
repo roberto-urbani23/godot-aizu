@@ -38,6 +38,7 @@ func _ready() -> void:
 	AizuInputDevice.device_changed.connect(_on_device_changed)
 	if manager:
 		manager.held_changed.connect(_on_held_changed)
+		manager.target_changed.connect(_on_target_changed)
 
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
@@ -55,7 +56,11 @@ func _on_zone_lost(detector: AizuInteractionDetector, zone: AizuInteractionZone)
 	if zone != _zone:
 		return
 	_forget_zone()
-	_hide_prompt()
+	# While holding, the drop and throw rows stay: only the zone's own rows go.
+	if manager and manager.is_holding():
+		_queue_refresh()
+	else:
+		_hide_prompt()
 
 
 func _on_device_changed(_is_gamepad: bool) -> void:
@@ -64,6 +69,11 @@ func _on_device_changed(_is_gamepad: bool) -> void:
 
 func _on_held_changed(_grabbable: AizuGrabbable) -> void:
 	_queue_refresh()
+
+
+func _on_target_changed(_zone: AizuInteractionZone) -> void:
+	if manager.is_holding():
+		_queue_refresh()
 
 
 func _forget_zone() -> void:
@@ -91,18 +101,32 @@ func _refresh() -> void:
 		for action in _zone.get_actions():
 			if action.can_trigger() and not action.text.is_empty():
 				rows.append(action)
-	if rows.is_empty():
+	var title := _get_title()
+	if rows.is_empty() and title.is_empty():
 		_hide_prompt()
 		return
 
 	clear()
 	push_paragraph(HORIZONTAL_ALIGNMENT_CENTER)
+	if not title.is_empty():
+		add_text(title)
 	for i in rows.size():
-		if i > 0:
+		if i > 0 or not title.is_empty():
 			newline()
 		_add_row(rows[i])
 	pop()
 	_show_prompt()
+
+
+# The name of the zone being aimed at, translated, or an empty string. While
+# something is held the manager knows which zone is aimed at.
+func _get_title() -> String:
+	var zone: AizuInteractionZone = _zone
+	if manager and manager.is_holding():
+		zone = manager.current_target
+	if not is_instance_valid(zone) or zone.display_name.is_empty():
+		return ""
+	return tr(zone.display_name)
 
 
 func _add_row(action: AizuInteractionAction) -> void:

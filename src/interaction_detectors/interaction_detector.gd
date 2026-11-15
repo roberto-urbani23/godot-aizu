@@ -33,6 +33,17 @@ func is_suspended() -> bool:
 	return _suspended
 
 
+## Makes the detector look through a body, for example the one the player holds
+## in front of the camera, which would hide whatever is behind it. Detectors
+## that cannot be blocked need nothing here.
+func ignore_body(_body: CollisionObject3D) -> void:
+	pass
+
+
+func unignore_body(_body: CollisionObject3D) -> void:
+	pass
+
+
 func _report_zone_found(zone: AizuInteractionZone) -> void:
 	if _suspended or not _should_report(zone):
 		return

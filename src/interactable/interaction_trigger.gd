@@ -34,6 +34,19 @@ func get_input_events(prefer_gamepad: bool = false) -> Array[InputEvent]:
 	return preferred + others
 
 
+## True if some input fires both this trigger and [param other].
+func conflicts_with(other: AizuInteractionTrigger) -> bool:
+	if other == null:
+		return false
+	if interaction_input_action_name and interaction_input_action_name == other.interaction_input_action_name:
+		return true
+	for mine in get_input_events():
+		for theirs in other.get_input_events():
+			if mine.is_match(theirs, true):
+				return true
+	return false
+
+
 func format_text(text: String) -> String:
 	if text.is_empty():
 		return ""

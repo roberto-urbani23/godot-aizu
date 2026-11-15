@@ -17,6 +17,11 @@ func _ready() -> void:
 	AizuInteractionDetectorBus.zone_lost.connect(_on_zone_lost)
 	if manager:
 		manager.held_changed.connect(func(_grabbable: AizuGrabbable) -> void: _queue_refresh())
+		manager.target_changed.connect(
+			func(_zone: AizuInteractionZone) -> void:
+				if manager.is_holding():
+					_queue_refresh()
+		)
 
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:
@@ -34,7 +39,10 @@ func _on_zone_lost(detector: AizuInteractionDetector, zone: AizuInteractionZone)
 	if zone != _zone:
 		return
 	_forget_zone()
-	visible = false
+	if manager and manager.is_holding():
+		_queue_refresh()
+	else:
+		visible = false
 
 
 func _forget_zone() -> void:
@@ -66,5 +74,10 @@ func _refresh() -> void:
 		var line := action.trigger.format_text(tr(action.text))
 		if not line.is_empty():
 			lines.append(line)
+	var zone: AizuInteractionZone = _zone
+	if manager and manager.is_holding():
+		zone = manager.current_target
+	if is_instance_valid(zone) and not zone.display_name.is_empty():
+		lines.insert(0, tr(zone.display_name))
 	text = "\n".join(lines)
 	visible = not lines.is_empty()

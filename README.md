@@ -58,6 +58,7 @@ func _on_interacted() -> void:
 | Export | Type | Description |
 |---|---|---|
 | `interaction_trigger` | AizuInteractionTrigger | input of the primary action |
+| `display_name` | String | optional name of the object ("Door", "Old merchant"). The prompt shows it as its first line while the zone is targeted, even if the zone has no action to offer. Goes through `tr()` |
 | `interaction_text` | String | prompt text of the primary action, supports `{interaction_key}` |
 | `actions` | Array[AizuInteractionAction] | more actions, each with its own input and text, see [Several actions](#several-actions-on-one-zone) |
 | `is_detectable` | bool | whether detectors report this zone |
@@ -252,9 +253,11 @@ Crate (RigidBody3D)
 | `zone` | the zone that offers the grab, usually a child of the body |
 | `grab_action_id` | id of the action of the zone that grabs. `primary` (the primary action) by default |
 | `grab_handle` | optional `Marker3D` child of the body: the point carried to the grab point, for example the tail of a fish. Without it the body is carried by its center of mass |
+| `kinds` | `AizuItemKind` resources: what this grabbable is for the receivers it can be used on, see [Using a held item](#using-a-held-item-on-something) |
+| `continuous_collision` | on by default: turns on continuous collision detection on the body from the grab until it rests after being let go, so a small or thin body (a knife, a key) thrown fast does not go through the floor |
 | `throw_force_multiplier` | multiplies the base throw force of the manager. 1 changes nothing |
 
-Signals `grabbed`, `released` (drop or throw) and `thrown` (only a throw, right after `released`) fire on the grabbable and on the manager.
+Signals `grabbed`, `released` (drop or throw) and `thrown` (only a throw, right after `released`) fire on the grabbable and on the manager. `used_on(receiver, use)` fires on the grabbable only, see below.
 
 On the `AizuInteractionManager`, set `grab_point` to a `Marker3D`, usually a child of the camera a little in front of it. It is where the body is carried and the direction of a throw (its -Z axis).
 
@@ -271,9 +274,46 @@ How it works:
 
 - The body keeps real physics while held: the manager sets its velocity every physics frame to pull its center of mass to the grab point, so it collides with the world and pushes other bodies. Gravity is off while held. It keeps the orientation it had at the grab, relative to the grab point, so it turns with the camera. It is never dropped for being far: it keeps pulling.
 - It does not collide with the `interactor` while held, when the interactor is a physics body.
-- While holding, the zone of the body is locked and the detectors are suspended, so no other zone is targeted. The input of the grab action drops the body, which keeps its velocity. `throw_trigger` throws it.
+- While holding, the zone of the body is locked and the body and its zone are ignored by the detectors, so they never hide what the player aims at. Other zones are active only if something can be done with what is held, see [below](#using-a-held-item-on-something). The input of the grab action drops the body, which keeps its velocity. `throw_trigger` throws it.
 - A lock of the manager (`set_lock`) drops the body. A body freed while held is forgotten.
 - Set the `manager` export of `AizuInteractionPrompt` or `AizuInteractionText` and they show the drop and throw rows while something is held.
+
+## Using a held item on something
+
+A knife on a piece of meat, a key on a door: add an `AizuItemReceiver` (`Node`) to the object that receives the item. The grabbable and the receiver never know each other: the link is a resource, an `AizuItemKind` (a `.tres` file you create once per kind, for example `knife.tres`, `red_key.tres`). No strings, no enums.
+
+1. Give the grabbable the kinds it is in `kinds` (a grabbable can have several).
+2. On the receiver, set `zones` to the zones of the object (both sides of a door, for example) and add one `AizuItemUse` to `uses` for every kind it accepts.
+
+| `AizuItemUse` | Description |
+|---|---|
+| `kind` | the `AizuItemKind` accepted |
+| `trigger`, `text`, `enabled`, `id` | as in an action of a zone: the input, the prompt text (with `{interaction_key}`) and an on/off switch |
+
+While the player holds a grabbable:
+
+- a zone is active only if one of its receivers has an enabled use for a kind held. All the other zones are not detected: no reticle, outline or prompt, and their own actions cannot be triggered;
+- an active zone shows the prompts of those uses instead of its own actions, then the drop and throw rows;
+- if the input of a use is also the input of drop or throw, the use wins while the player aims at the zone, and the prompt does not show the row it replaces. Aiming elsewhere, the input drops or throws as usual.
+
+With nothing held, a zone behaves as usual. A zone that only has receivers (no primary action and no `actions`) is not detected at all.
+
+Two signals, one for each side. Connect them from the script of each object:
+
+| Signal | On | Use |
+|---|---|---|
+| `used(use, grabbable, by)` | `AizuItemReceiver` | the script of the meat or the door reacts (cut, unlock) |
+| `used_on(receiver, use)` | `AizuGrabbable` | the script of the knife or the key decides what happens to it: a key frees itself, a knife does nothing and stays in the hands |
+
+Nothing happens to the held item by itself: if nobody listens to `used_on`, it stays in the hands.
+
+```
+Meat (Node3D, script connects Receiver.used)
+  AizuInteractionZone (Area3D)        <- no primary action: only the receiver uses it
+  AizuItemReceiver                    <- zones: [the zone], uses: [knife -> "{interaction_key} Cut"]
+```
+
+Set `enabled` of a use to turn it off, for example once the meat is all cut. Uses are resources shared by every instance of a scene: make them unique if instances differ.
 
 ## Listening for events
 
@@ -285,6 +325,8 @@ Connect to `AizuInteractionDetectorBus` from anywhere:
 | `zone_lost(detector, zone)` | a detector stops reporting a zone, or the zone is locked |
 | `zone_locked(zone)` | a zone became locked |
 | `grab_requested(grabbable, by)` | the grab action of a grabbable was triggered. The manager whose `interactor` is `by` grabs it |
+
+The bus also keeps `is_holding` and `held_kinds`, set by the manager while it holds a grabbable. The zones read them. They are global: with two managers in one game (split screen) they would interfere.
 | `zone_unlocked(zone)` | a zone became unlocked |
 
 ```gdscript
@@ -327,7 +369,7 @@ Hidden by default. Shows `zone.interaction_text` when a `TARGET` detector finds 
 
 With `interaction_text = "Press {interaction_key} to open"` and the action bound to E, it shows `Press E to open`.
 
-Place it where you want it on screen, for example just to the right of the reticle. Set the font and size on the label itself.
+Place it where you want it on screen, for example just to the right of the reticle. If the zone has a `display_name`, it is the first line. Set the font and size on the label itself.
 
 Set its optional `manager` export to show the drop and throw rows while the player holds something.
 
@@ -341,7 +383,7 @@ Like `AizuInteractionText`, but `{interaction_key}` can be a glyph drawn inside 
 | `glyph_height` | height of the glyph in pixels |
 | `fade_in_seconds` | fade in time. 0 shows the prompt at once |
 | `fade_out_seconds` | fade out time, short by default. 0 hides it at once |
-| `manager` | optional. While it holds something the prompt shows the drop and throw rows |
+| `manager` | optional. While it holds something the prompt shows the drop and throw rows, and the name of the zone it aims at |
 
 The rows follow the zone while it is targeted: a change of text, of actions or of the device in use (keyboard or gamepad) redraws them. Use it instead of `AizuInteractionText`, not together with it. The text is centered, so place the node where you want it and give it a width.
 
