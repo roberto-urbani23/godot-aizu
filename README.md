@@ -251,6 +251,7 @@ Crate (RigidBody3D)
 | `body` | the body carried. Frozen bodies cannot be grabbed |
 | `zone` | the zone that offers the grab, usually a child of the body |
 | `grab_action_id` | id of the action of the zone that grabs. `primary` (the primary action) by default |
+| `grab_handle` | optional `Marker3D` child of the body: the point carried to the grab point, for example the tail of a fish. Without it the body is carried by its center of mass |
 | `throw_force_multiplier` | multiplies the base throw force of the manager. 1 changes nothing |
 
 Signals `grabbed`, `released` (drop or throw) and `thrown` (only a throw, right after `released`) fire on the grabbable and on the manager.

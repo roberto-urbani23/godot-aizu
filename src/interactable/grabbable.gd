@@ -19,6 +19,9 @@ signal thrown
 @export var zone: AizuInteractionZone
 ## Id of the action of the zone that grabs. The primary action is "primary".
 @export var grab_action_id: StringName = AizuInteractionZone.PRIMARY_ACTION_ID
+## Optional. The point of the body that is carried to the grab point, for example
+## the tail of a fish. Without it the body is carried by its center of mass.
+@export var grab_handle: Marker3D
 ## Multiplies the base throw force of the manager. 1 changes nothing: raise it
 ## for heavy bodies, lower it for light ones.
 @export_range(0.0, 100.0, 0.01, "or_greater") var throw_force_multiplier: float = 1.0

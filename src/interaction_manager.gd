@@ -198,14 +198,23 @@ func _release(with_throw: bool) -> void:
 	held_changed.emit(null)
 
 
-# The point the body is carried by is its center of mass, not its origin: the
-# origin can be anywhere (a fish whose mesh sits above its pivot), and carrying
-# it would put the body in a different spot for every orientation it was grabbed in.
+# The center of mass of the body, in world space. It is the point a body is
+# carried by, not its origin: the origin can be anywhere (a fish whose mesh sits
+# above its pivot), and carrying it would put the body in a different spot for
+# every orientation it was grabbed in.
 func _get_body_center(body: RigidBody3D) -> Vector3:
 	var state := PhysicsServer3D.body_get_direct_state(body.get_rid())
 	if state == null:
 		return body.global_position
 	return body.global_position + state.center_of_mass
+
+
+# The point of the body that goes to the grab point: the grab handle of the
+# grabbable if it has one, the center of mass otherwise.
+func _get_carried_point(grabbable: AizuGrabbable) -> Vector3:
+	if is_instance_valid(grabbable.grab_handle) and grabbable.grab_handle.is_inside_tree():
+		return grabbable.grab_handle.global_position
+	return _get_body_center(grabbable.body)
 
 
 # Detectors rest while locked or carrying something.
@@ -225,8 +234,9 @@ func _physics_process(_delta: float) -> void:
 	if held == null or not is_instance_valid(held.body) or grab_point == null:
 		return
 	var body := held.body
-	var to_point := grab_point.global_position - _get_body_center(body)
-	body.linear_velocity = (to_point * grab_stiffness).limit_length(max_grab_speed)
+	var point := _get_carried_point(held)
+	var to_point := grab_point.global_position - point
+	var point_velocity := (to_point * grab_stiffness).limit_length(max_grab_speed)
 
 	# Turn by the shortest rotation to the orientation the body had at the grab,
 	# relative to the grab point.
@@ -239,6 +249,11 @@ func _physics_process(_delta: float) -> void:
 	var angle := delta_rotation.get_angle()
 	var axis := delta_rotation.get_axis() if angle > 0.0001 else Vector3.ZERO
 	body.angular_velocity = (axis * angle * grab_stiffness).limit_length(max_grab_speed)
+
+	# The turn is around the center of mass: it also moves a carried point that is
+	# not there, so the velocity of the body makes up for it.
+	var arm := point - _get_body_center(body)
+	body.linear_velocity = point_velocity - body.angular_velocity.cross(arm)
 
 
 func _on_zone_found(detector: AizuInteractionDetector, zone: AizuInteractionZone) -> void:

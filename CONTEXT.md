@@ -28,6 +28,10 @@ _Avoid_: Throwable, carryable, pickable
 The spot the grabbed object is carried to and the direction it is thrown along, usually in front of the player's camera.
 _Avoid_: Hold point, carry anchor
 
+**Grab handle**:
+The spot of a grabbable that is carried to the grab point. Its center of mass unless the grabbable names another spot.
+_Avoid_: Grab anchor, pivot
+
 **Throw**:
 Releasing a grabbed object with a push. Possible only for a grabbable.
 _Avoid_: Launch, toss
